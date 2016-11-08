@@ -20,63 +20,26 @@
 # you may need to include it in quotes so it isn't expanded by the shell
 # _before_ executing the {{cmd}} command.
 
-declare -r __GO_TEST_GLOB_ARGS=('--ignore' 'bats' 'tests' '.bats')
-
-_test_tab_completion() {
-  local word_index="$1"
-  shift
-  if [[ "$word_index" -eq '0' ]]; then
-    compgen -W '--coverage --edit --list' -- "$1"
-    if [[ "${1:0:1}" == '-' ]]; then
-      return
-    fi
-  fi
-  @go 'glob' '--complete' "$((word_index + ${#__GO_TEST_GLOB_ARGS[@]}))" \
-    "${__GO_TEST_GLOB_ARGS[@]}" "$@"
-}
-
-_test_coverage() {
-  . "$_GO_USE_MODULES" 'kcov-ubuntu'
-  run_kcov "tests/kcov" "tests/coverage" \
-    'go,go-core.bash,lib/,libexec/,scripts/' \
-    '/tmp,tests/bats/' \
-    'https://coveralls.io/github/mbland/go-script-bash' \
-    "$_GO_SCRIPT" 'test' "$@"
-}
+declare -r _GO_TEST_GLOB_ARGS=('--ignore' 'bats' 'tests' '.bats')
+declare -r _GO_TEST_BATS_PATH='tests/bats/libexec/bats'
+declare -r _GO_TEST_KCOV_DIR='tests/kcov'
+declare -r _GO_TEST_KCOV_OUTDIR='tests/coverage'
+declare -r _GO_TEST_KCOV_INCLUDE='go,go-core.bash,lib/,libexec/,scripts/'
+declare -r _GO_TEST_KCOV_EXCLUDE='/tmp,tests/bats/'
+declare -r _GO_TEST_KCOV_URL='https://coveralls.io/github/mbland/go-script-bash'
 
 _test() {
-  if [[ "$1" == '--complete' ]]; then
-    # Tab completions
-    shift
-    _test_tab_completion "$@"
-    return
-  fi
-
-  local bats_path='tests/bats/libexec/bats'
-
-  if [[ ! -f "$bats_path" ]]; then
+  if [[ "$1" != '--complete' && ! -f "$_GO_TEST_BATS_PATH" ]]; then
     git submodule update --init tests/bats
   fi
 
-  if [[ "$1" == '--coverage' && "$_COVERAGE_RUN" != 'true' ]]; then
-    shift
-    local -x _COVERAGE_RUN='true'
-    _test_coverage "$@"
-  elif [[ "$1" == '--list' ]]; then
-    shift
-    @go 'glob' '--trim' "${__GO_TEST_GLOB_ARGS[@]}" "$@"
-  elif [[ "$1" == '--edit' ]]; then
-    shift
-    local tests=($(@go 'glob' "${__GO_TEST_GLOB_ARGS[@]}" "$@"))
-    @go 'edit' "${tests[@]}"
-  elif [[ "$_COVERAGE_RUN" != 'true' && "$TRAVIS_OS_NAME" == 'linux' ]]; then
-    # Collect coverage by default on Travis. Doesn't seem to slow anything down
-    # substantially.
-    _test '--coverage' "$@"
-  else
-    local tests=($(@go 'glob' "${__GO_TEST_GLOB_ARGS[@]}" "$@"))
-    time "$BASH" "$bats_path" "${tests[@]}"
+  if [[ "$TRAVIS_OS_NAME" == 'linux' ]]; then
+    local _GO_TEST_COVERAGE='true'
   fi
+
+  . "$_GO_USE_MODULES" 'test'
+  # Tab completions
+  @go.test_main "$@"
 }
 
 _test "$@"

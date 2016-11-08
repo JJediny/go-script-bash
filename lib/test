@@ -1,0 +1,109 @@
+#! /bin/bash
+#
+# Functions for writing a go-script-bash test script that uses Bats and kcov
+#
+# Exports:
+#
+#   @go.test_arg_completion
+#     Provides command line argument completion for test scripts
+#
+#   @go.test_coverage
+#     Invokes kcov to collect and report test coverage data
+#
+#   @go.test_main
+#     Parses command-line flags and arguments and executes Bats and Kcov
+#
+# By importing this module into a command script, you can provide the same
+# interface to running Bats tests that the go-script-bash framework itself uses
+# by passing your script's arguments to @go.test_main.
+#
+# For Bats test helper utilities and test assertions that aren't bound to the
+# go-script-bash framework, see the contents of the go-script-bash/lib/bats
+# directory.
+#
+# To use @go.test_main or @go.test_arg_completion, define the following
+# variables in your test script:
+#
+#   _GO_TEST_GLOB_ARGS  An array of arguments to '@go glob' to select Bats tests
+#   _GO_TEST_BATS_PATH  The path to your project's Bats installation
+#
+# To support code coverage via @go.test_main or to use @go.test_arg_completion
+# directly, the following optional variables are also available:
+#
+#   _GO_TEST_COVERAGE      When not null, collect coverage if possible with kcov
+#   _GO_TEST_KCOV_DIR      The directory into which to clone and build kcov
+#   _GO_TEST_KCOV_OUTDIR   The coverage output directory; must not already exist
+#   _GO_TEST_KCOV_INCLUDE  The kcov --include-pattern argument value
+#   _GO_TEST_KCOV_EXCLUDE  The kcov --exclude-pattern argument value
+#   _GO_TEST_KCOV_URL      The project's Coveralls URL (appears in output)
+#
+# See the comments for each function for further details.
+
+# Provides command line argument completion for test scripts
+#
+# Emits the standard --coverage, --edit, and --list flags and uses '@go glob' to
+# produce a list of test name completions based on test file names.
+#
+# See './go help complete' for information on the argument completion protocol.
+#
+# Arguments:
+#   $1:   Zero-based index of the word to be completed from the following args
+#   ...:  Array of remaining command line arguments
+@go.test_arg_completion() {
+  local word_index="$1"
+  shift
+  if [[ "$word_index" -eq '0' ]]; then
+    compgen -W '--coverage --edit --list' -- "$1"
+    if [[ "${1:0:1}" == '-' ]]; then
+      return
+    fi
+  fi
+  @go 'glob' '--complete' "$((word_index + ${#_GO_TEST_GLOB_ARGS[@]}))" \
+    "${_GO_TEST_GLOB_ARGS[@]}" "$@"
+}
+
+# Invokes kcov to collect and report test coverage data
+#
+# Currently only supported on Ubuntu Linux, via the core kcov-ubuntu module.
+# See the file header comment for a description of the required variables.
+@go.test_coverage() {
+  . "$_GO_USE_MODULES" 'kcov-ubuntu'
+  run_kcov "$_GO_TEST_KCOV_DIR" "$_GO_TEST_KCOV_OUTDIR" \
+    "$_GO_TEST_KCOV_INCLUDE" "$_GO_TEST_KCOV_EXCLUDE" "$_GO_TEST_KCOV_URL" \
+    "$_GO_SCRIPT" 'test' "$@"
+}
+
+# Parses command-line flags and arguments and executes Bats and Kcov
+@go.test_main() {
+  case "$1" in
+  --complete)
+    shift
+    @go.test_arg_completion "$@"
+    return
+    ;;
+  --coverage)
+    if [[ "$__GO_TEST_COVERAGE_RUN" != 'true' ]]; then
+      shift
+      local -x __GO_TEST_COVERAGE_RUN='true'
+      @go.test_coverage "$@"
+    fi
+    ;;
+  --list)
+    shift
+    @go 'glob' '--trim' "${_GO_TEST_GLOB_ARGS[@]}" "$@"
+    ;;
+  --edit)
+    shift
+    local tests=($(@go 'glob' "${_GO_TEST_GLOB_ARGS[@]}" "$@"))
+    @go 'edit' "${tests[@]}"
+    ;;
+  *)
+    if [[ -z "$__GO_TEST_COVERAGE_RUN" && -n "$_GO_TEST_COVERAGE" ]]; then
+      @go.test_main '--coverage' "$@"
+    else
+      local tests=($(@go 'glob' "${_GO_TEST_GLOB_ARGS[@]}" "$@"))
+      time "$BASH" "$_GO_TEST_BATS_PATH" "${tests[@]}"
+    fi
+    ;;
+  esac
+}
