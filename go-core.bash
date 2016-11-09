@@ -89,6 +89,19 @@ declare -r -x _GO_SCRIPT="$_GO_ROOTDIR/${0##*/}"
 # The name of either the ./go script itself or the shell function invoking it.
 declare -r -x _GO_CMD="${_GO_CMD:=$0}"
 
+# The array of command line arguments comprising the ./go command name after
+# _GO_CMD.
+#
+# When exported to scripts not written in bash, the array is converted to a
+# string with the components delimited by the ASCII NUL character ($'\0').
+declare -x _GO_CMD_NAME=
+
+# The array of command line arguments for the ./go command after _GO_CMD_NAME.
+#
+# When exported to scripts not written in bash, the array is converted to a
+# string with the arguments delimited by the ASCII NUL character ($'\0').
+declare -x _GO_CMD_ARGV=
+
 # The URL of the framework's original source repository.
 declare -r -x _GO_CORE_URL='https://github.com/mbland/go-script-bash'
 
@@ -167,6 +180,8 @@ declare -r -x _GO_CORE_URL='https://github.com/mbland/go-script-bash'
   if ! _@go.set_command_path_and_argv "$cmd" "$@"; then
     return 1
   fi
+
+  local __go_cmd_name=("$cmd" "${@:1:$(("$#" - "${#__go_argv[@]}"))}")
   _@go.run_command_script "$__go_cmd_path" "${__go_argv[@]}"
 }
 
@@ -197,12 +212,19 @@ _@go.run_command_script() {
   interpreter="${interpreter%% *}"
 
   if [[ "$interpreter" == 'bash' || "$interpreter" == 'sh' ]]; then
+    _GO_CMD_NAME=("${__go_cmd_name[@]}")
+    _GO_CMD_ARGV=("$@")
     . "$cmd_path" "$@"
-  elif [[ -n "$interpreter" ]]; then
-    "$interpreter" "$cmd_path" "$@"
-  else
+  elif [[ -z "$interpreter" ]]; then
     @go.printf "Could not parse interpreter from first line of $cmd_path.\n" >&2
     return 1
+  else
+    local origIFS="$IFS"
+    local IFS=$'\0'
+    _GO_CMD_NAME="${__go_cmd_name[*]}"
+    _GO_CMD_ARGV="$*"
+    IFS="$origIFS"
+    "$interpreter" "$cmd_path" "$@"
   fi
 }
 

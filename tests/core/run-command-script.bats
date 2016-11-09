@@ -48,14 +48,17 @@ teardown() {
     '}')
 
   local expected=("_GO_CMD: $TEST_GO_SCRIPT"
+    "_GO_CMD_ARGV: foo"$'\0'"bar"$'\0'"baz quux"$'\0'"xyzzy"
+    "_GO_CMD_NAME: test-command"$'\0'"test-subcommand"
     "_GO_CORE_DIR: $_GO_CORE_DIR"
     "_GO_CORE_URL: $_GO_CORE_URL"
     "_GO_ROOTDIR: $TEST_GO_ROOTDIR"
     "_GO_SCRIPT: $TEST_GO_SCRIPT"
     "_GO_SCRIPTS_DIR: $TEST_GO_SCRIPTS_DIR")
 
-  create_test_command_script 'test-command' "${script[@]}"
-  run "$TEST_GO_SCRIPT" test-command
+  create_test_command_script 'test-command' "# Placeholder parent command"
+  create_test_command_script 'test-command.d/test-subcommand' "${script[@]}"
+  run "$TEST_GO_SCRIPT" test-command test-subcommand foo bar 'baz quux' xyzzy
   local IFS=$'\n'
   assert_success "${expected[*]}"
 }
