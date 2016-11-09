@@ -181,7 +181,7 @@ declare -r -x _GO_CORE_URL='https://github.com/mbland/go-script-bash'
     return 1
   fi
 
-  local __go_cmd_name=("$cmd" "${@:1:$(("$#" - "${#__go_argv[@]}"))}")
+  local __go_cmd_name=("$cmd" "${@:1:$(($# - ${#__go_argv[@]}))}")
   _@go.run_command_script "$__go_cmd_path" "${__go_argv[@]}"
 }
 
